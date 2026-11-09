@@ -191,7 +191,7 @@
 
   <footer>
     Built against one line in the Chief of Staff posting: <q>Build a target account list and launch an outbound campaign.</q><br>
-    Places data © Overture Maps Foundation (CDLA Permissive 2.0, with OpenStreetMap data under ODbL). Basemap © OpenStreetMap contributors, © CARTO. Phone numbers and websites are the public business listings; no personal contact details are collected.
+    Places data © Overture Maps Foundation (CDLA Permissive 2.0, with OpenStreetMap data under ODbL). Basemap © Esri and OpenStreetMap contributors. Phone numbers and websites are the public business listings; no personal contact details are collected.
     Code: <a href="https://github.com/JakeM-R/ventura-account-finder">github.com/JakeM-R/ventura-account-finder</a>
   </footer>
 </div>
@@ -242,10 +242,18 @@
 
   // Map
   const map = L.map("map", { zoomControl: true, scrollWheelZoom: false, preferCanvas: true }).setView([39.5, -98.35], 4);
-  L.tileLayer("https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png", {
-    maxZoom: 18, subdomains: "abcd",
-    attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> &copy; <a href="https://carto.com/attributions">CARTO</a>',
+  // Keyless basemaps: Esri's light grey canvas, falling back to standard OSM tiles if it fails.
+  const esri = L.tileLayer("https://server.arcgisonline.com/ArcGIS/rest/services/Canvas/World_Light_Gray_Base/MapServer/tile/{z}/{y}/{x}", {
+    maxZoom: 16, attribution: 'Tiles &copy; <a href="https://www.esri.com">Esri</a>, HERE, Garmin, &copy; OpenStreetMap contributors',
   }).addTo(map);
+  let tileErrors = 0;
+  esri.on("tileerror", () => {
+    if (++tileErrors !== 4) return;
+    map.removeLayer(esri);
+    L.tileLayer("https://tile.openstreetmap.org/{z}/{x}/{y}.png", {
+      maxZoom: 18, attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors',
+    }).addTo(map);
+  });
   const layer = L.layerGroup().addTo(map);
   map.on("click", () => map.scrollWheelZoom.enable());
 
