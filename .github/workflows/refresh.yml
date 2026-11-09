@@ -26,4 +26,5 @@ jobs:
           git add data/accounts.json
           git diff --cached --quiet && echo "No change" && exit 0
           git commit -m "Refresh accounts data"
+          git pull --rebase origin main
           git push

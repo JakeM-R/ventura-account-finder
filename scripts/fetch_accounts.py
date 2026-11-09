@@ -130,7 +130,7 @@ def classify(tags):
 def overpass(query):
     body = urllib.parse.urlencode({"data": query}).encode()
     last = None
-    for attempt in range(3):
+    for attempt in range(2):
         for url in MIRRORS:
             try:
                 req = urllib.request.Request(url, data=body, headers={"User-Agent": "ventura-account-finder/1.0"})
@@ -147,9 +147,15 @@ def overpass(query):
 def main():
     branches = []
     coverage = {}
+    failed = []
     for st in STATES:
         print(f"{st}...", file=sys.stderr)
-        data, src = overpass(QUERY.format(st=st))
+        try:
+            data, src = overpass(QUERY.format(st=st))
+        except RuntimeError as e:
+            print(f"  skipping {st}: {e}", file=sys.stderr)
+            failed.append(st)
+            continue
         kept = 0
         seen = set()
         for e in data.get("elements", []):
@@ -241,8 +247,11 @@ def main():
         "source": "OpenStreetMap contributors, via the Overpass API (ODbL)",
         "branches": len(branches),
         "coverage": coverage,
+        "failed": failed,
         "companies": companies,
     }
+    if len(failed) > 10:
+        raise SystemExit(f"too many states failed ({len(failed)}), keeping the previous data")
     path = Path(__file__).resolve().parent.parent / "data" / "accounts.json"
     path.parent.mkdir(exist_ok=True)
     path.write_text(json.dumps(out, separators=(",", ":"), ensure_ascii=False))
