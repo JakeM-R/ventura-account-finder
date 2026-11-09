@@ -109,7 +109,9 @@
     header.hero { padding: 28px 0 16px; }
     .sub { font-size: 16px; }
     .steps { grid-template-columns: 1fr; gap: 8px; margin-top: 18px; }
-    .step { padding: 10px 14px; }
+    .step { padding: 8px 12px; display: flex; gap: 10px; align-items: baseline; }
+    .step h3 { margin: 0; font-size: 14.5px; }
+    .step p { display: none; }
     .tool { padding: 10px; margin-left: -6px; margin-right: -6px; }
     .grid { grid-template-columns: 1fr; height: auto; }
     #map { height: 260px; order: -1; }
@@ -204,7 +206,7 @@
   ];
   const SEG_NOUN = { roofing: "roofing", gypsum: "gypsum and drywall", lumber: "lumber", building: "building supply", all: "building materials" };
   const STATES = {AL:"Alabama",AK:"Alaska",AZ:"Arizona",AR:"Arkansas",CA:"California",CO:"Colorado",CT:"Connecticut",DE:"Delaware",DC:"District of Columbia",FL:"Florida",GA:"Georgia",HI:"Hawaii",ID:"Idaho",IL:"Illinois",IN:"Indiana",IA:"Iowa",KS:"Kansas",KY:"Kentucky",LA:"Louisiana",ME:"Maine",MD:"Maryland",MA:"Massachusetts",MI:"Michigan",MN:"Minnesota",MS:"Mississippi",MO:"Missouri",MT:"Montana",NE:"Nebraska",NV:"Nevada",NH:"New Hampshire",NJ:"New Jersey",NM:"New Mexico",NY:"New York",NC:"North Carolina",ND:"North Dakota",OH:"Ohio",OK:"Oklahoma",OR:"Oregon",PA:"Pennsylvania",RI:"Rhode Island",SC:"South Carolina",SD:"South Dakota",TN:"Tennessee",TX:"Texas",UT:"Utah",VT:"Vermont",VA:"Virginia",WA:"Washington",WV:"West Virginia",WI:"Wisconsin",WY:"Wyoming"};
-  const DEFAULT = { seg: "roofing", st: "TX", minb: 1 };
+  const DEFAULT = { seg: "all", st: "TX", minb: 1 };
   const DEFAULT_TPL = "Hi {first_name},\n\nSaw that {company} runs {branches} {segment} locations in {state} ({cities}). RFQs and orders at that scale usually arrive by email, PDF and phone and get keyed into the ERP by hand. Ventura prepares the quote and the sales order inside your existing ERP, so inside sales gets that time back.\n\nWorth 15 minutes to see it on one of your own RFQs?";
 
   const $ = (id) => document.getElementById(id);
@@ -275,6 +277,10 @@
       .replace(/\b(a) (\w+) locations\b/, "a $2 location");
   }
 
+  function fmtPhone(p) {
+    const d = String(p || "").replace(/\D/g, "").replace(/^1(?=\d{10}$)/, "");
+    return d.length === 10 ? `(${d.slice(0, 3)}) ${d.slice(3, 6)}-${d.slice(6)}` : p;
+  }
   function hostOf(u) { try { return new URL(u.includes("://") ? u : "https://" + u).hostname.replace(/^www\./, ""); } catch { return u; } }
 
   function renderList() {
@@ -295,7 +301,7 @@
       const cities = r.cities.length ? esc(r.cities.slice(0, 5).join(" · ")) + (r.cities.length > 5 ? ` · +${r.cities.length - 5}` : "") : "City not tagged";
       const links = [
         r.c.web ? `<a href="${esc(r.c.web.includes("://") ? r.c.web : "https://" + r.c.web)}" target="_blank" rel="noopener">${esc(hostOf(r.c.web))}</a>` : "",
-        r.phone ? `<span class="mono">${esc(r.phone)}</span>` : "",
+        r.phone ? `<a class="mono" href="tel:${esc(String(r.phone).replace(/[^+\d]/g, ""))}">${esc(fmtPhone(r.phone))}</a>` : "",
       ].filter(Boolean).join("");
       return `<div class="row${sel ? " sel" : ""}${r.c.customer ? " cust" : ""}" data-i="${i}">
         <div class="rank">${String(i + 1).padStart(2, "0")}</div>
@@ -369,7 +375,7 @@
     const head = ["rank", "company", "segment", "state", "branches_in_state", "branches_total", "states", "cities", "website", "phone", "opener"];
     const lines = [head.join(",")];
     rows.filter(r => !r.c.customer).forEach((r, i) => {
-      lines.push([i + 1, r.c.name, r.c.seg, state.st, r.here.length, r.total, r.nStates, r.cities.join("; "), r.c.web || "", r.phone || "", opener(r)]
+      lines.push([i + 1, r.c.name, r.c.seg, state.st, r.here.length, r.total, r.nStates, r.cities.join("; "), r.c.web || "", r.phone ? fmtPhone(r.phone) : "", opener(r)]
         .map(v => `"${String(v).replaceAll('"', '""')}"`).join(","));
     });
     const blob = new Blob([lines.join("\n")], { type: "text/csv" });

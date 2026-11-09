@@ -40,7 +40,10 @@ NOT_SUPPLIER = re.compile(
     r"realty|church|school|salon|lashes|cabinet|countertops?|granite|flooring|carpet|tile|"
     r"pool|spa|fence|fencing|irrigation|mulch|nursery|garden|auto|truck|tire|beauty|"
     r"office supply|medical|dental|janitorial|restaurant|food|beverage|pet|plumbing|"
-    r"electrical|welding|safety|industrial supply|paint)\b", re.I)
+    r"electrical|welding|safety|industrial supply|paint|refrigeration|pipe|pump|air|"
+    r"aggregates?|quarry|sand|gravel|ready ?mix|asphalt|rock|ranch|farm|feed|propane|"
+    r"johnstone|hajoca|winsupply|morrison supply|ssd|water|septic|cement|concrete|vulcan|"
+    r"martin marietta|cemex|heidelberg|lehigh|crh|sign|signs|graphics|staker parson|liquidators)\b", re.I)
 
 SEGMENT_NAME = [
     ("roofing", re.compile(r"\broof\w*|\bsiding\b|exterior|shingle|gutter", re.I)),
@@ -54,11 +57,26 @@ NATIONAL_CHAINS = [
     ("Lowe's", r"\blowe'?s\b"), ("Menards", r"menards"), ("84 Lumber", r"\b84 lumber"),
     ("Builders FirstSource", r"builders firstsource|\bbmc\b|probuild"), ("L&W Supply", r"\bl ?& ?w supply"),
     ("GMS", r"\bgms\b|gypsum management"), ("Foundation Building Materials", r"foundation building materials|\bfbm\b"),
-    ("Ferguson", r"ferguson"), ("US LBM", r"\bus lbm\b"), ("Ace Hardware", r"\bace hardware"),
-    ("True Value", r"true value"), ("Do it Best", r"do it best"), ("Tractor Supply", r"tractor supply"),
+    ("Ferguson", r"ferguson"), ("US LBM", r"\bus lbm\b"), ("Tractor Supply", r"tractor supply"),
     ("Fastenal", r"fastenal"), ("Grainger", r"grainger"), ("Sherwin-Williams", r"sherwin"),
     ("White Cap", r"white cap"), ("Lansing Building Products", r"lansing building products"),
+    ("Lowe's Pro Supply", r"lowe'?s pro supply|maintenance supply headquarters"),
+    ("Orchard Supply Hardware", r"orchard supply"), ("Gulfeagle Supply", r"gulfeagle"),
 ]
+# Chains are also recognised from their website, since many branch listings carry only a place name.
+CHAIN_DOMAINS = {
+    "abcsupply.com": "ABC Supply", "becn.com": "Beacon / QXO", "qxo.com": "Beacon / QXO",
+    "srsdistribution.com": "SRS Distribution", "homedepot.com": "The Home Depot", "lowes.com": "Lowe's",
+    "lowesprosupply.com": "Lowe's Pro Supply", "menards.com": "Menards", "84lumber.com": "84 Lumber",
+    "bldr.com": "Builders FirstSource", "lwsupply.com": "L&W Supply", "gms.com": "GMS",
+    "fbmsales.com": "Foundation Building Materials", "ferguson.com": "Ferguson", "uslbm.com": "US LBM",
+    "whitecap.com": "White Cap", "lansingbp.com": "Lansing Building Products", "gulfeaglesupply.com": "Gulfeagle Supply",
+    "tractorsupply.com": "Tractor Supply", "fastenal.com": "Fastenal",
+}
+# Buying groups, manufacturers and link hosts that many unrelated yards list as their website or brand.
+SHARED_KEYS = re.compile(r"doitbest|acehardware|\bace\b|truevalue|true value|do it best|benjaminmoore|marvin|"
+                         r"linktr\.ee|andersen|pella|jeld|sherwin|ppg|valspar|behr|hub\.biz|business\.site|"
+                         r"yext|wix|squarespace|godaddy|weebly|orgill|emery|handy hardware", re.I)
 NATIONAL_RE = [(n, re.compile(p, re.I)) for n, p in NATIONAL_CHAINS]
 
 # From the customer logo wall on ventura.ai (checked 2026-11-09).
@@ -140,6 +158,9 @@ def main():
             name = ((r.get("names") or {}).get("primary") or "").strip()
             if not name or not SUPPLIER.search(name) or NOT_SUPPLIER.search(name):
                 continue
+            web0 = ((r.get("websites") or [None])[0] or "").lower()
+            if re.search(r"hvac|plumb|electric|refrigeration|vulcanmaterials|cemex|martinmarietta", web0):
+                continue
             addr = (r.get("addresses") or [{}])[0] or {}
             if addr.get("country") != "US":
                 continue
@@ -166,8 +187,25 @@ def main():
     for b in branches:
         uniq.setdefault((norm(b["name"]), round(b["lat"], 3), round(b["lon"], 3)), b)
     branches = list(uniq.values())
+    import os
+    if os.environ.get("DUMP_BRANCHES"):
+        Path(os.environ["DUMP_BRANCHES"]).write_text(json.dumps(branches))
 
-    # Union-find: same brand, same cleaned name, or same website domain = one company.
+    # Union-find. National distributors merge by chain. For everyone else a shared brand or website
+    # only counts when it contains the company's own name, so buying-group sites don't chain
+    # unrelated independents together.
+    def chain_of(b):
+        d = domain(b["web"]) or ""
+        for dom, n in CHAIN_DOMAINS.items():
+            if d == dom or d.endswith("." + dom):
+                return n
+        text = f"{b['name']} {b['brand'] or ''}"
+        return next((n for n, rx in NATIONAL_RE if rx.search(text)), None)
+
+    def tokens(s):
+        return {t for t in norm(s).split() if len(t) >= 4 and t not in {"lumber", "supply", "building", "materials",
+                "products", "company", "wholesale", "roofing", "distribution", "supplies", "hardware", "center"}}
+
     parent = list(range(len(branches)))
 
     def find(i):
@@ -178,15 +216,22 @@ def main():
 
     first = {}
     for i, b in enumerate(branches):
+        b["chain"] = chain_of(b)
         keys = []
-        n = norm(b["name"])
-        if n and n not in GENERIC:
-            keys.append("n:" + n)
-        if b["brand"]:
-            keys.append("n:" + norm(b["brand"]))
-        d = domain(b["web"])
-        if d:
-            keys.append("d:" + d)
+        if b["chain"]:
+            keys.append("c:" + b["chain"])
+        else:
+            n = norm(b["name"])
+            if n and n not in GENERIC:
+                keys.append(f"n:{b['st']}:{n}")      # same name only merges within a state
+            own = tokens(b["name"])
+            if b["brand"] and not SHARED_KEYS.search(b["brand"]) and own & tokens(b["brand"]):
+                keys.append("b:" + norm(b["brand"]))
+            d = domain(b["web"])
+            if d and not SHARED_KEYS.search(d):
+                label = re.sub(r"[^a-z0-9]", "", d.split(".")[-2] if d.count(".") >= 1 else d)
+                if any(t in label for t in own):
+                    keys.append("d:" + d)
         for k in keys:
             if k in first:
                 parent[find(i)] = find(first[k])
@@ -201,15 +246,16 @@ def main():
     for members in groups.values():
         names = {}
         for m in members:
-            label = m["brand"] or m["name"]
+            label = m["brand"] if (m["brand"] and not SHARED_KEYS.search(m["brand"]) and tokens(m["name"]) & tokens(m["brand"])) else m["name"]
             names[label] = names.get(label, 0) + 1
-        name = max(names.items(), key=lambda kv: (kv[1], -len(kv[0])))[0]
+        chain = next((m["chain"] for m in members if m["chain"]), None)
+        name = chain or max(names.items(), key=lambda kv: (kv[1], -len(kv[0])))[0]
         segs = {}
         for m in members:
             segs[m["seg"]] = segs.get(m["seg"], 0) + 1
-        chain = next((n for n, rx in NATIONAL_RE if any(rx.search(m["name"]) for m in members)), None)
-        cust = next((CUSTOMER_KEYS[norm(m["name"])] for m in members if norm(m["name"]) in CUSTOMER_KEYS), None)
-        web = next((m["web"] for m in members if domain(m["web"])), None)
+        cust = next((v for m in members for k, v in CUSTOMER_KEYS.items()
+                     if norm(m["name"]) == k or norm(m["name"]).startswith(k + " ")), None)
+        web = next((m["web"] for m in members if domain(m["web"]) and not SHARED_KEYS.search(domain(m["web"]))), None)
         companies.append({
             "name": name,
             "seg": max(segs.items(), key=lambda kv: kv[1])[0],
