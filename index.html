@@ -122,17 +122,17 @@
 <body>
 <div class="strip"><div class="wrap">
   <span><b>Demo for Ventura</b> · built by Jake Makking-Robinson</span>
-  <span>Data: OpenStreetMap · refreshed <span class="mono" id="asof">…</span></span>
+  <span>Data: Overture Maps · refreshed <span class="mono" id="asof">…</span></span>
 </div></div>
 
 <div class="wrap">
   <header class="hero">
     <div class="eyebrow">01 / Account finder</div>
     <h1>Pick a segment and a state. Get the suppliers worth calling, biggest first.</h1>
-    <p class="sub">Every branch on the map, grouped into companies, so you see who runs 12 yards and who runs 1.</p>
+    <p class="sub">Every supplier branch on the map, grouped into companies, so you see who runs 12 yards and who runs 1.</p>
     <div class="steps">
       <div class="step"><div class="n">01</div><h3>Pick a segment</h3><p>Roofing, gypsum &amp; drywall, lumber or building supplies.</p></div>
-      <div class="step"><div class="n">02</div><h3>Pick a state</h3><p>Any of the 50, plus DC. National chains are hidden by default.</p></div>
+      <div class="step"><div class="n">02</div><h3>Pick a state</h3><p>Any of the 50, plus DC. National distributors are hidden by default.</p></div>
       <div class="step"><div class="n">03</div><h3>Get the list</h3><p>Ranked by branch count, with a first line to copy and a CSV export.</p></div>
     </div>
   </header>
@@ -147,7 +147,7 @@
         <option value="3">3+ branches</option>
         <option value="5">5+ branches</option>
       </select>
-      <label class="tog"><input type="checkbox" id="chains"> Show national chains</label>
+      <label class="tog"><input type="checkbox" id="chains"> Show national distributors</label>
     </div>
     <div class="summary">
       <span class="big" id="sumBig">Loading…</span>
@@ -171,24 +171,25 @@
       <div class="eyebrow">02 / How it works</div>
       <h2>Where the list comes from</h2>
       <ul>
-        <li>Every Monday a GitHub Action pulls supplier locations from OpenStreetMap for all 50 states and DC. The date at the top is the last pull.</li>
-        <li>Each location is put in a segment from its OSM trade tag, or failing that its name (“Roofing Supply”, “Gypsum”, “Lumber”). Plumbing, electrical and HVAC suppliers are left out.</li>
-        <li>Locations are grouped into one company when they share a brand tag, a cleaned-up name or a website domain.</li>
-        <li>Ranking is by branches mapped in the chosen state. The count only covers branches someone has added to OpenStreetMap, so treat it as a lower bound and a starting list, not a census.</li>
-        <li>Companies on the ventura.ai customer logo wall are tagged and left out of the CSV.</li>
+        <li>Every Monday a GitHub Action pulls the latest Overture Maps places release (open business listings from Meta, Microsoft, Esri and OpenStreetMap) for all 50 states and DC. The date at the top is the last pull.</li>
+        <li>It keeps places listed as building-supply, lumber or wholesale businesses whose names say they supply something (“Supply”, “Materials”, “Lumber”, “Distribution”). Contractors, installers, landscapers and plumbing, electrical and HVAC suppliers are left out.</li>
+        <li>Each company gets a segment from its name: roofing and siding, gypsum and drywall, lumber, or general building supplies.</li>
+        <li>Branches are grouped into one company when they share a brand, a cleaned-up name or a website domain.</li>
+        <li>Ranking is by branches listed in the chosen state. Listings miss some yards and occasionally misfile one, so treat it as a strong starting list, not a census.</li>
+        <li>Companies on the ventura.ai customer logo wall are tagged and left out of the CSV. National distributors (ABC Supply, Beacon, SRS, L&amp;W, GMS and similar) are hidden unless you ask for them.</li>
       </ul>
     </div>
     <div>
       <div class="eyebrow">03 / Coverage</div>
-      <h2>Branches mapped per state</h2>
-      <p style="margin-top:0">Lower numbers usually mean thinner OpenStreetMap coverage, not fewer suppliers. Grey states have under 40 branches mapped.</p>
+      <h2>Supplier branches per state</h2>
+      <p style="margin-top:0">All four segments, national distributors included. Grey states have under 100 branches listed.</p>
       <div class="cov" id="cov"></div>
     </div>
   </section>
 
   <footer>
     Built against one line in the Chief of Staff posting: <q>Build a target account list and launch an outbound campaign.</q><br>
-    Map data © OpenStreetMap contributors (ODbL). Basemap © CARTO. No contact details are collected; phone numbers and websites are the public ones in OSM.
+    Places data © Overture Maps Foundation (CDLA Permissive 2.0, with OpenStreetMap data under ODbL). Basemap © OpenStreetMap contributors, © CARTO. Phone numbers and websites are the public business listings; no personal contact details are collected.
     Code: <a href="https://github.com/JakeM-R/ventura-account-finder">github.com/JakeM-R/ventura-account-finder</a>
   </footer>
 </div>
@@ -279,7 +280,7 @@
   function renderList() {
     if (!DATA) return;
     if (!rows.length) {
-      $("list").innerHTML = `<div class="empty">Nothing mapped for this segment in ${esc(STATES[state.st])} yet. Try “All four” or a neighbouring state.</div>`;
+      $("list").innerHTML = `<div class="empty">Nothing listed for this segment in ${esc(STATES[state.st])} yet. Try “All four” or a neighbouring state.</div>`;
       return;
     }
     $("list").innerHTML = rows.slice(0, 300).map((r, i) => {
@@ -287,7 +288,7 @@
       const segName = SEGS.find(s => s[0] === r.c.seg)[1];
       const tags = [
         r.c.customer ? `<span class="tag cust">Ventura customer</span>` : "",
-        r.c.chain ? `<span class="tag">National chain</span>` : "",
+        r.c.chain ? `<span class="tag">National distributor</span>` : "",
         state.seg === "all" ? `<span class="tag seg">${esc(segName)}</span>` : "",
         r.nStates > 1 ? `<span class="tag">${r.total} branches in ${r.nStates} states</span>` : "",
       ].join("");
@@ -360,7 +361,7 @@
     const multi = rows.filter(r => r.here.length >= 3).length;
     const segLabel = SEGS.find(s => s[0] === state.seg)[1];
     $("sumBig").textContent = `${rows.length.toLocaleString()} ${rows.length === 1 ? "company" : "companies"} · ${segLabel} in ${STATES[state.st]}`;
-    $("sumMeta").textContent = `${branches.toLocaleString()} branches mapped · ${multi} with 3+ branches${state.chains ? "" : " · national chains hidden"}`;
+    $("sumMeta").textContent = `${branches.toLocaleString()} branches · ${multi} with 3+ branches${state.chains ? "" : " · national distributors hidden"}`;
     renderList(); renderMap(fit);
   }
 
@@ -382,7 +383,7 @@
     DATA = d;
     $("asof").textContent = d.generated;
     const cov = Object.entries(d.coverage).sort((a, b) => b[1] - a[1]);
-    $("cov").innerHTML = cov.map(([k, v]) => `<div class="${v < 40 ? "lo" : ""}"><span>${k}</span><span>${v.toLocaleString()}</span></div>`).join("");
+    $("cov").innerHTML = cov.map(([k, v]) => `<div class="${v < 100 ? "lo" : ""}"><span>${k}</span><span>${v.toLocaleString()}</span></div>`).join("");
     update(true);
   }).catch(() => {
     $("sumBig").textContent = "Couldn’t load the data file.";

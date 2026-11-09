@@ -11,14 +11,16 @@ permissions:
 jobs:
   refresh:
     runs-on: ubuntu-latest
-    timeout-minutes: 90
+    timeout-minutes: 40
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
         with:
           python-version: "3.12"
-      - name: Fetch suppliers from OpenStreetMap
-        run: python3 scripts/fetch_accounts.py
+      - name: Fetch suppliers from Overture Maps
+        run: |
+          pip install pyarrow==26.0.1
+          python3 scripts/fetch_accounts.py
       - uses: actions/upload-artifact@v4
         if: always()
         with:
