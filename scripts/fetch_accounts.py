@@ -34,7 +34,7 @@ STATES = {
 
 # Supplier tags worth looking at. Everything is then classified into a segment or dropped.
 QUERY = """
-[out:json][timeout:180];
+[out:json][timeout:90];
 area["ISO3166-2"="US-{st}"]->.a;
 (
   nwr["shop"="trade"](area.a);
@@ -134,13 +134,13 @@ def overpass(query):
         for url in MIRRORS:
             try:
                 req = urllib.request.Request(url, data=body, headers={"User-Agent": "ventura-account-finder/1.0"})
-                with urllib.request.urlopen(req, timeout=240) as r:
+                with urllib.request.urlopen(req, timeout=100) as r:
                     return json.load(r), url
             except Exception as e:  # noqa: BLE001
                 last = e
                 print(f"  {url} failed: {e}", file=sys.stderr)
                 time.sleep(5)
-        time.sleep(30 * (attempt + 1))
+        time.sleep(20)
     raise RuntimeError(f"all mirrors failed: {last}")
 
 
@@ -149,7 +149,7 @@ def main():
     coverage = {}
     failed = []
     for st in STATES:
-        print(f"{st}...", file=sys.stderr)
+        print(f"{st}...", file=sys.stderr, flush=True)
         try:
             data, src = overpass(QUERY.format(st=st))
         except RuntimeError as e:
